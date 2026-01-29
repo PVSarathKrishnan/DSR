@@ -1,0 +1,27 @@
+# User-specific configuration (DO NOT COMMIT)
+webhook_config.py
+config.py
+Code.gs
+
+# Google API Credentials (DO NOT COMMIT)
+credentials.json
+token.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

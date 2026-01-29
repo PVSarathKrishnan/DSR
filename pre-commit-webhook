@@ -1,0 +1,318 @@
+#!/usr/bin/env python3
+"""
+Git Pre-Commit Hook - Logs commit information to Google Sheets via Webhook
+No Google API credentials needed!
+Works with both terminal and GUI commits (VS Code, etc.)
+"""
+
+import sys
+import os
+import json
+from datetime import datetime
+from typing import Optional
+import urllib.request
+import urllib.error
+
+# Add the parent directory to Python path to import our modules
+hook_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(os.path.dirname(hook_dir))
+sys.path.insert(0, parent_dir)
+
+try:
+    import webhook_config as config
+except ImportError as e:
+    print(f"❌ Error importing webhook_config: {e}")
+    print("Make sure webhook_config.py is in the parent directory")
+    sys.exit(0)  # Allow commit to proceed
+
+
+def is_interactive_terminal() -> bool:
+    """Check if running in an interactive terminal (not GUI)"""
+    return sys.stdin.isatty() and sys.stdout.isatty()
+
+
+def print_colored(message: str, color: str = config.COLOR_RESET):
+    """Print colored message to terminal"""
+    print(f"{color}{message}{config.COLOR_RESET}")
+
+
+def print_divider():
+    """Print a visual divider"""
+    print_colored(config.EMOJI_DIVIDER * 42, config.COLOR_CYAN)
+
+
+def get_commit_message() -> Optional[str]:
+    """
+    Extract commit message from Git
+    
+    Returns:
+        Commit message or None if not found
+    """
+    try:
+        # Check .git/COMMIT_EDITMSG
+        git_dir = os.path.join(os.getcwd(), '.git')
+        commit_msg_file = os.path.join(git_dir, 'COMMIT_EDITMSG')
+        
+        if os.path.exists(commit_msg_file):
+            with open(commit_msg_file, 'r') as f:
+                # Get first non-comment line
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith('#'):
+                        return line
+        
+        return None
+    except Exception as e:
+        return None
+
+
+def get_user_input(prompt: str, default: str = "") -> str:
+    """
+    Get user input with a default value
+    
+    Args:
+        prompt: Prompt message
+        default: Default value
+    
+    Returns:
+        User input or default value
+    """
+    try:
+        if default:
+            user_input = input(f"{prompt} [{config.COLOR_CYAN}{default}{config.COLOR_RESET}]: ").strip()
+            return user_input if user_input else default
+        else:
+            return input(f"{prompt}: ").strip()
+    except KeyboardInterrupt:
+        print()
+        print_colored(f"\n{config.EMOJI_ERROR} Commit aborted by user", config.COLOR_RED)
+        sys.exit(1)
+
+
+def validate_time(time_str: str) -> float:
+    """
+    Validate and parse time input
+    
+    Args:
+        time_str: Time string from user
+    
+    Returns:
+        Valid time value (defaults to 1.0 if invalid)
+    """
+    try:
+        time_value = float(time_str)
+        if time_value > 0:
+            return time_value
+        else:
+            print_colored(f"{config.EMOJI_WARNING} Invalid time value, using default: {config.DEFAULT_TIME} hours", 
+                        config.COLOR_YELLOW)
+            return config.DEFAULT_TIME
+    except ValueError:
+        print_colored(f"{config.EMOJI_WARNING} Invalid time value, using default: {config.DEFAULT_TIME} hours", 
+                    config.COLOR_YELLOW)
+        return config.DEFAULT_TIME
+
+
+def show_gui_dialog(commit_msg: str) -> tuple[Optional[str], Optional[str], Optional[float]]:
+    """
+    Show macOS GUI dialog for commit details
+    
+    Args:
+        commit_msg: The commit message to use as default title
+    
+    Returns:
+        Tuple of (title, description, hours) or (None, None, None) if cancelled
+    """
+    import subprocess
+    
+    # Escape quotes in commit message for AppleScript
+    escaped_msg = commit_msg.replace('"', '\\"').replace('\\', '\\\\')
+    
+    # Create AppleScript dialog
+    applescript = f'''
+    set defaultTitle to "{escaped_msg}"
+    set defaultTime to "{config.DEFAULT_TIME}"
+    
+    -- Show dialog for task title
+    set titleDialog to display dialog "Task Title:" default answer defaultTitle with title "DSR Commit Logger" buttons {{"Cancel", "Next"}} default button "Next"
+    if button returned of titleDialog is "Cancel" then
+        error number -128
+    end if
+    set taskTitle to text returned of titleDialog
+    
+    -- Show dialog for description
+    set descDialog to display dialog "Task Description (optional):" default answer "" with title "DSR Commit Logger" buttons {{"Cancel", "Next"}} default button "Next"
+    if button returned of descDialog is "Cancel" then
+        error number -128
+    end if
+    set taskDesc to text returned of descDialog
+    
+    -- Show dialog for time
+    set timeDialog to display dialog "Time Taken (in hours):" default answer defaultTime with title "DSR Commit Logger" buttons {{"Cancel", "Submit"}} default button "Submit"
+    if button returned of timeDialog is "Cancel" then
+        error number -128
+    end if
+    set taskTime to text returned of timeDialog
+    
+    return taskTitle & "|SEPARATOR|" & taskDesc & "|SEPARATOR|" & taskTime
+    '''
+    
+    try:
+        # Run AppleScript
+        result = subprocess.run(
+            ['osascript', '-e', applescript],
+            capture_output=True,
+            text=True,
+            timeout=300  # 5 minute timeout
+        )
+        
+        if result.returncode == 0:
+            # Parse the result
+            output = result.stdout.strip()
+            parts = output.split('|SEPARATOR|')
+            
+            if len(parts) == 3:
+                title = parts[0].strip()
+                description = parts[1].strip()
+                time_str = parts[2].strip()
+                
+                # Validate time
+                hours = validate_time(time_str)
+                
+                return title, description, hours
+            else:
+                return None, None, None
+        else:
+            # User cancelled or error
+            return None, None, None
+            
+    except subprocess.TimeoutExpired:
+        print("[DSR Logger] Dialog timeout - using defaults")
+        return commit_msg, "", config.DEFAULT_TIME
+    except Exception as e:
+        print(f"[DSR Logger] Dialog error: {e} - using defaults")
+        return commit_msg, "", config.DEFAULT_TIME
+
+
+def send_to_webhook(data: dict) -> tuple[bool, Optional[str]]:
+    """
+    Send commit data to Apps Script webhook
+    
+    Args:
+        data: Dictionary with commit data
+    
+    Returns:
+        Tuple of (success: bool, error_message: Optional[str])
+    """
+    if not config.WEBHOOK_URL:
+        return False, "Webhook URL not configured. Please set WEBHOOK_URL in webhook_config.py"
+    
+    try:
+        # Prepare the request
+        json_data = json.dumps(data).encode('utf-8')
+        req = urllib.request.Request(
+            config.WEBHOOK_URL,
+            data=json_data,
+            headers={'Content-Type': 'application/json'},
+            method='POST'
+        )
+        
+        # Send the request
+        with urllib.request.urlopen(req, timeout=config.REQUEST_TIMEOUT) as response:
+            response_data = json.loads(response.read().decode('utf-8'))
+            
+            if response_data.get('success'):
+                return True, None
+            else:
+                return False, response_data.get('error', 'Unknown error from webhook')
+    
+    except urllib.error.HTTPError as e:
+        return False, f"HTTP Error {e.code}: {e.reason}"
+    
+    except urllib.error.URLError as e:
+        return False, f"Network error: {e.reason}"
+    
+    except TimeoutError:
+        return False, "Request timed out"
+    
+    except Exception as e:
+        return False, f"Unexpected error: {str(e)}"
+
+
+def main():
+    """Main hook execution - works with both terminal and GUI commits"""
+    
+    # Check if running in interactive terminal or GUI
+    interactive = is_interactive_terminal()
+    
+    # Get commit message
+    commit_msg = get_commit_message()
+    if not commit_msg:
+        commit_msg = "Commit"
+    
+    if interactive:
+        # Interactive mode: Show terminal prompts
+        print()
+        print_colored(f"{config.EMOJI_PENCIL} Logging commit to Google Sheets...", config.COLOR_BLUE)
+        print_divider()
+        print(f"Commit Message: \"{config.COLOR_CYAN}{commit_msg}{config.COLOR_RESET}\"")
+        print()
+        
+        # Prompt for task details
+        task_title = get_user_input("Task Title", default=commit_msg)
+        task_description = get_user_input("Task Description", default="")
+        time_input = get_user_input("Time Taken in hours", default=str(config.DEFAULT_TIME))
+        time_taken = validate_time(time_input)
+        
+        print()
+        print_colored("Submitting to Google Sheets...", config.COLOR_BLUE)
+    else:
+        # Non-interactive mode (GUI commit): Show GUI dialog
+        print(f"[DSR Logger] Opening input dialog...")
+        
+        task_title, task_description, time_taken = show_gui_dialog(commit_msg)
+        
+        # Check if user cancelled
+        if task_title is None:
+            print("[DSR Logger] ❌ Cancelled by user")
+            sys.exit(1)  # Abort the commit
+        
+        print(f"[DSR Logger] Logging: {task_title[:50]}...")
+    
+    # Get current date
+    current_date = datetime.now().strftime(config.DATE_FORMAT)
+    
+    # Prepare data for webhook
+    webhook_data = {
+        "date": current_date,
+        "title": task_title,
+        "description": task_description,
+        "hours": time_taken,
+        "sha": "pending"
+    }
+    
+    # Send to webhook
+    success, error_msg = send_to_webhook(webhook_data)
+    
+    if interactive:
+        if success:
+            print_colored(f"{config.EMOJI_CHECK} Logged to Google Sheets successfully!", config.COLOR_GREEN)
+            print()
+        else:
+            print_colored(f"{config.EMOJI_WARNING} Failed to log to Google Sheets", config.COLOR_YELLOW)
+            print_colored(f"   Reason: {error_msg}", config.COLOR_YELLOW)
+            print_colored("   Commit will proceed anyway.", config.COLOR_YELLOW)
+            print()
+    else:
+        # GUI mode: Show compact status
+        if success:
+            print("[DSR Logger] ✓ Logged successfully")
+        else:
+            print(f"[DSR Logger] ⚠ Warning: {error_msg}")
+    
+    # Always exit with 0 to allow commit to proceed
+    sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()
