@@ -139,18 +139,26 @@ def show_gui_dialog(commit_msg: str) -> tuple[Optional[str], Optional[str], Opti
 def show_tkinter_dialog(commit_msg: str) -> tuple[Optional[str], Optional[str], Optional[float]]:
     """
     Cross-platform GUI dialog using tkinter (Windows, Linux, macOS fallback)
+    Returns (None, None, None) if "Skip Logging" is clicked
+    Returns (None, None, -1) if "Cancel" is clicked
     """
     try:
         import tkinter as tk
         from tkinter import ttk
         
-        result = {"cancelled": True, "title": "", "description": "", "hours": config.DEFAULT_TIME}
+        result = {"cancelled": True, "skip": False, "title": "", "description": "", "hours": config.DEFAULT_TIME}
         
         def on_submit():
             result["cancelled"] = False
+            result["skip"] = False
             result["title"] = title_var.get()
             result["description"] = desc_text.get("1.0", "end-1c")
             result["hours"] = hours_var.get()
+            root.destroy()
+        
+        def on_skip():
+            result["cancelled"] = False
+            result["skip"] = True
             root.destroy()
         
         def on_cancel():
@@ -203,10 +211,13 @@ def show_tkinter_dialog(commit_msg: str) -> tuple[Optional[str], Optional[str], 
         button_frame = ttk.Frame(main_frame)
         button_frame.grid(row=7, column=0, columnspan=2)
         
+        skip_btn = ttk.Button(button_frame, text="Skip Logging", command=on_skip, width=12)
+        skip_btn.pack(side=tk.LEFT, padx=5)
+        
         cancel_btn = ttk.Button(button_frame, text="Cancel", command=on_cancel, width=12)
         cancel_btn.pack(side=tk.LEFT, padx=5)
         
-        submit_btn = ttk.Button(button_frame, text="Submit & Commit", command=on_submit, width=15)
+        submit_btn = ttk.Button(button_frame, text="Log to Sheets", command=on_submit, width=15)
         submit_btn.pack(side=tk.LEFT, padx=5)
         
         # Bind Enter key to submit (when not in text area)
@@ -226,8 +237,10 @@ def show_tkinter_dialog(commit_msg: str) -> tuple[Optional[str], Optional[str], 
         # Run dialog
         root.mainloop()
         
-        if result["cancelled"]:
-            return None, None, None
+        if result["skip"]:
+            return None, None, None  # Skip logging but proceed with commit
+        elif result["cancelled"]:
+            return None, None, -1.0  # User cancelled, abort commit
         else:
             hours = validate_time(str(result["hours"]))
             return result["title"], result["description"], hours
@@ -239,37 +252,50 @@ def show_tkinter_dialog(commit_msg: str) -> tuple[Optional[str], Optional[str], 
 
 def show_macos_dialog(commit_msg: str) -> tuple[Optional[str], Optional[str], Optional[float]]:
     """
-    macOS native dialog using AppleScript - Single form style
+    macOS native dialog using AppleScript - Single comprehensive form
+    Returns (None, None, None) if user clicks "Skip Logging"
+    Returns (None, None, -1) if user cancels
     """
     import subprocess
     
     # Escape for AppleScript
     escaped_msg = commit_msg.replace('"', '\\"').replace('\\', '\\\\')
     
-    # Single form with all fields
+    # Comprehensive single-page form with Skip option
     applescript = f'''
     set defaultTitle to "{escaped_msg}"
     set defaultTime to "{config.DEFAULT_TIME}"
+    set defaultDesc to ""
     
-    set dialogText to "Task Title:" & return & defaultTitle & return & return & "Description (optional):" & return & return & "Time (hours): " & defaultTime
+    -- Single comprehensive dialog
+    set formText to "Enter commit details below:" & return & return & "Task Title:"
+    set userInput to display dialog formText & return & defaultTitle & return & return & "Description (optional):" & return & defaultDesc & return & return & "Time (hours): " & defaultTime default answer defaultTitle & return & defaultDesc & return & defaultTime buttons {{"Skip Logging", "Cancel", "Log to Sheets"}} default button "Log to Sheets" cancel button "Cancel" with title "📝 DSR Commit Logger"
     
-    set userDialog to display dialog "📝 Log Commit to Google Sheets" & return & return & "Task Title:" default answer defaultTitle buttons {{"Cancel", "Next"}} default button "Next" with title "DSR Commit Logger"
-    if button returned of userDialog is "Cancel" then
-        error number -128
+    set buttonChoice to button returned of userInput
+    set userText to text returned of userInput
+    
+    -- Handle Skip Logging
+    if buttonChoice is "Skip Logging" then
+        return "SKIP_LOGGING"
     end if
-    set taskTitle to text returned of userDialog
     
-    set descDialog to display dialog "Description (optional):" default answer "" buttons {{"Back", "Next"}} default button "Next" with title "DSR Commit Logger"
-    if button returned of descDialog is "Back" then
-        error number -128
-    end if
-    set taskDesc to text returned of descDialog
+    -- Parse the multi-line input
+    set AppleScript's text item delimiters to return
+    set inputLines to text items of userText
+    set AppleScript's text item delimiters to ""
     
-    set timeDialog to display dialog "Time Taken (hours):" default answer defaultTime buttons {{"Back", "Submit & Commit"}} default button "Submit & Commit" with title "DSR Commit Logger"
-    if button returned of timeDialog is "Back" then
-        error number -128
+    -- Extract values (expecting 5 lines: title, empty, desc, empty, time)
+    set taskTitle to item 1 of inputLines
+    set taskDesc to ""
+    set taskTime to "{config.DEFAULT_TIME}"
+    
+    if (count of inputLines) >= 3 then
+        set taskDesc to item 3 of inputLines
     end if
-    set taskTime to text returned of timeDialog
+    
+    if (count of inputLines) >= 5 then
+        set taskTime to item 5 of inputLines
+    end if
     
     return taskTitle & "|SEPARATOR|" & taskDesc & "|SEPARATOR|" & taskTime
     '''
@@ -284,6 +310,11 @@ def show_macos_dialog(commit_msg: str) -> tuple[Optional[str], Optional[str], Op
         
         if result.returncode == 0:
             output = result.stdout.strip()
+            
+            # Check for skip logging
+            if output == "SKIP_LOGGING":
+                return None, None, None  # Skip logging but proceed with commit
+            
             parts = output.split('|SEPARATOR|')
             
             if len(parts) == 3:
@@ -292,7 +323,8 @@ def show_macos_dialog(commit_msg: str) -> tuple[Optional[str], Optional[str], Op
                 hours = validate_time(parts[2].strip())
                 return title, description, hours
         
-        return None, None, None
+        # User cancelled
+        return None, None, -1.0
             
     except:
         # Fallback to tkinter
@@ -384,10 +416,15 @@ def main():
         
         task_title, task_description, time_taken = show_gui_dialog(commit_msg)
         
-        # Check if user cancelled
-        if task_title is None:
+        # Check if user cancelled (time_taken == -1.0)
+        if time_taken == -1.0:
             print("[DSR Logger] ❌ Cancelled by user")
             sys.exit(1)  # Abort the commit
+        
+        # Check if user clicked "Skip Logging" (all None)
+        if task_title is None and task_description is None and time_taken is None:
+            print("[DSR Logger] ⏭️  Skipped logging - proceeding with commit")
+            sys.exit(0)  # Proceed with commit without logging
         
         print(f"[DSR Logger] Logging: {task_title[:50]}...")
     

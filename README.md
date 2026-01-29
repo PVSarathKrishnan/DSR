@@ -17,6 +17,7 @@
 - 🔒 **No API Credentials Needed** - Uses simple webhook approach
 - ⚡ **Never Blocks Commits** - Warns on failure but always allows commits
 - 🎯 **Smart Defaults** - Pre-filled with commit message, 1 hour default
+- ⏭️ **Skip Logging Option** - Commit without logging to sheets
 - 💡 **Cancel Support** - Abort commit anytime during input
 - 🖥️ **GUI Frameworks** - Native dialogs on macOS, tkinter on Windows/Linux
 
@@ -106,10 +107,15 @@ Time Taken in hours [1.0]: 2
 ```
 
 ### GUI Mode (VS Code, etc.)
-Three native macOS dialogs appear:
-1. **Task Title** - Pre-filled with commit message
-2. **Description** - Optional details
-3. **Time Taken** - Default 1.0 hours
+A single dialog appears with all fields and options:
+- **Task Title** - Pre-filled with commit message
+- **Description** - Optional details
+- **Time (hours)** - Default 1.0 hours
+
+**Buttons:**
+- **Skip Logging** - Proceed with commit without logging to sheets
+- **Cancel** - Abort the commit
+- **Log to Sheets** - Submit data and proceed with commit
 
 ---
 
