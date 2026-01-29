@@ -134,8 +134,11 @@ Time Taken in hours [1.0]:
 
 ## 💡 **Pro Tips**
 
-**Quick commits:**
-- Just click **Next** → **Next** → **Submit** to use all defaults
+**Quick commits without tracking:**
+- Click **Skip Logging** for instant commits (no API call)
+
+**Ultra-quick logging:**
+- Just click **Log to Sheets** to use all defaults
 
 **Detailed tracking:**
 - Edit title to be more specific than commit message
@@ -143,8 +146,12 @@ Time Taken in hours [1.0]:
 - Adjust time based on actual work done
 
 **Cancelling:**
-- Press `Escape` or click **Cancel** to abort
+- Click **Cancel** to abort the commit
 - Useful if you forgot to add something to the commit
+
+**Keyboard shortcuts:**
+- Press `Enter` in title/time fields to submit quickly
+- Press `Escape` to cancel
 
 ---
 
