@@ -115,7 +115,7 @@ def validate_time(time_str: str) -> float:
 
 def show_gui_dialog(commit_msg: str) -> tuple[Optional[str], Optional[str], Optional[float]]:
     """
-    Show macOS GUI dialog for commit details
+    Show GUI dialog for commit details (works on macOS and Windows)
     
     Args:
         commit_msg: The commit message to use as default title
@@ -123,33 +123,150 @@ def show_gui_dialog(commit_msg: str) -> tuple[Optional[str], Optional[str], Opti
     Returns:
         Tuple of (title, description, hours) or (None, None, None) if cancelled
     """
+    import platform
     import subprocess
     
-    # Escape quotes in commit message for AppleScript
+    system = platform.system()
+    
+    if system == "Darwin":  # macOS
+        return show_macos_dialog(commit_msg)
+    elif system == "Windows":
+        return show_windows_dialog(commit_msg)
+    else:  # Linux or other
+        return show_tkinter_dialog(commit_msg)
+
+
+def show_tkinter_dialog(commit_msg: str) -> tuple[Optional[str], Optional[str], Optional[float]]:
+    """
+    Cross-platform GUI dialog using tkinter (Windows, Linux, macOS fallback)
+    """
+    try:
+        import tkinter as tk
+        from tkinter import ttk
+        
+        result = {"cancelled": True, "title": "", "description": "", "hours": config.DEFAULT_TIME}
+        
+        def on_submit():
+            result["cancelled"] = False
+            result["title"] = title_var.get()
+            result["description"] = desc_text.get("1.0", "end-1c")
+            result["hours"] = hours_var.get()
+            root.destroy()
+        
+        def on_cancel():
+            result["cancelled"] = True
+            root.destroy()
+        
+        # Create main window
+        root = tk.Tk()
+        root.title("DSR Commit Logger")
+        root.geometry("500x400")
+        root.resizable(False, False)
+        
+        # Set window icon (optional)
+        try:
+            root.iconbitmap(default="")
+        except:
+            pass
+        
+        # Main frame with padding
+        main_frame = ttk.Frame(root, padding="20")
+        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        
+        # Title
+        title_label = ttk.Label(main_frame, text="📝 Log Commit to Google Sheets", font=("Helvetica", 14, "bold"))
+        title_label.grid(row=0, column=0, columnspan=2, pady=(0, 20))
+        
+        # Task Title
+        ttk.Label(main_frame, text="Task Title:", font=("Helvetica", 10, "bold")).grid(row=1, column=0, sticky=tk.W, pady=(0, 5))
+        title_var = tk.StringVar(value=commit_msg)
+        title_entry = ttk.Entry(main_frame, textvariable=title_var, width=50)
+        title_entry.grid(row=2, column=0, columnspan=2, pady=(0, 15))
+        title_entry.focus()
+        
+        # Description
+        ttk.Label(main_frame, text="Description (optional):", font=("Helvetica", 10, "bold")).grid(row=3, column=0, sticky=tk.W, pady=(0, 5))
+        desc_text = tk.Text(main_frame, width=50, height=6, font=("Helvetica", 10))
+        desc_text.grid(row=4, column=0, columnspan=2, pady=(0, 15))
+        
+        # Time
+        ttk.Label(main_frame, text="Time Taken (hours):", font=("Helvetica", 10, "bold")).grid(row=5, column=0, sticky=tk.W, pady=(0, 5))
+        hours_var = tk.DoubleVar(value=config.DEFAULT_TIME)
+        hours_frame = ttk.Frame(main_frame)
+        hours_frame.grid(row=6, column=0, columnspan=2, sticky=tk.W, pady=(0, 20))
+        
+        hours_spinbox = ttk.Spinbox(hours_frame, from_=0.1, to=24.0, increment=0.5, textvariable=hours_var, width=10)
+        hours_spinbox.pack(side=tk.LEFT)
+        ttk.Label(hours_frame, text="  (e.g., 0.5, 1, 2.5)").pack(side=tk.LEFT)
+        
+        # Buttons
+        button_frame = ttk.Frame(main_frame)
+        button_frame.grid(row=7, column=0, columnspan=2)
+        
+        cancel_btn = ttk.Button(button_frame, text="Cancel", command=on_cancel, width=12)
+        cancel_btn.pack(side=tk.LEFT, padx=5)
+        
+        submit_btn = ttk.Button(button_frame, text="Submit & Commit", command=on_submit, width=15)
+        submit_btn.pack(side=tk.LEFT, padx=5)
+        
+        # Bind Enter key to submit (when not in text area)
+        def on_enter(event):
+            if event.widget != desc_text:
+                on_submit()
+        
+        root.bind('<Return>', on_enter)
+        root.bind('<Escape>', lambda e: on_cancel())
+        
+        # Center window
+        root.update_idletasks()
+        x = (root.winfo_screenwidth() // 2) - (root.winfo_width() // 2)
+        y = (root.winfo_screenheight() // 2) - (root.winfo_height() // 2)
+        root.geometry(f'+{x}+{y}')
+        
+        # Run dialog
+        root.mainloop()
+        
+        if result["cancelled"]:
+            return None, None, None
+        else:
+            hours = validate_time(str(result["hours"]))
+            return result["title"], result["description"], hours
+            
+    except Exception as e:
+        print(f"[DSR Logger] GUI error: {e} - using defaults")
+        return commit_msg, "", config.DEFAULT_TIME
+
+
+def show_macos_dialog(commit_msg: str) -> tuple[Optional[str], Optional[str], Optional[float]]:
+    """
+    macOS native dialog using AppleScript - Single form style
+    """
+    import subprocess
+    
+    # Escape for AppleScript
     escaped_msg = commit_msg.replace('"', '\\"').replace('\\', '\\\\')
     
-    # Create AppleScript dialog
+    # Single form with all fields
     applescript = f'''
     set defaultTitle to "{escaped_msg}"
     set defaultTime to "{config.DEFAULT_TIME}"
     
-    -- Show dialog for task title
-    set titleDialog to display dialog "Task Title:" default answer defaultTitle with title "DSR Commit Logger" buttons {{"Cancel", "Next"}} default button "Next"
-    if button returned of titleDialog is "Cancel" then
+    set dialogText to "Task Title:" & return & defaultTitle & return & return & "Description (optional):" & return & return & "Time (hours): " & defaultTime
+    
+    set userDialog to display dialog "📝 Log Commit to Google Sheets" & return & return & "Task Title:" default answer defaultTitle buttons {{"Cancel", "Next"}} default button "Next" with title "DSR Commit Logger"
+    if button returned of userDialog is "Cancel" then
         error number -128
     end if
-    set taskTitle to text returned of titleDialog
+    set taskTitle to text returned of userDialog
     
-    -- Show dialog for description
-    set descDialog to display dialog "Task Description (optional):" default answer "" with title "DSR Commit Logger" buttons {{"Cancel", "Next"}} default button "Next"
-    if button returned of descDialog is "Cancel" then
+    set descDialog to display dialog "Description (optional):" default answer "" buttons {{"Back", "Next"}} default button "Next" with title "DSR Commit Logger"
+    if button returned of descDialog is "Back" then
         error number -128
     end if
     set taskDesc to text returned of descDialog
     
-    -- Show dialog for time
-    set timeDialog to display dialog "Time Taken (in hours):" default answer defaultTime with title "DSR Commit Logger" buttons {{"Cancel", "Submit"}} default button "Submit"
-    if button returned of timeDialog is "Cancel" then
+    set timeDialog to display dialog "Time Taken (hours):" default answer defaultTime buttons {{"Back", "Submit & Commit"}} default button "Submit & Commit" with title "DSR Commit Logger"
+    if button returned of timeDialog is "Back" then
         error number -128
     end if
     set taskTime to text returned of timeDialog
@@ -158,40 +275,35 @@ def show_gui_dialog(commit_msg: str) -> tuple[Optional[str], Optional[str], Opti
     '''
     
     try:
-        # Run AppleScript
         result = subprocess.run(
             ['osascript', '-e', applescript],
             capture_output=True,
             text=True,
-            timeout=300  # 5 minute timeout
+            timeout=300
         )
         
         if result.returncode == 0:
-            # Parse the result
             output = result.stdout.strip()
             parts = output.split('|SEPARATOR|')
             
             if len(parts) == 3:
                 title = parts[0].strip()
                 description = parts[1].strip()
-                time_str = parts[2].strip()
-                
-                # Validate time
-                hours = validate_time(time_str)
-                
+                hours = validate_time(parts[2].strip())
                 return title, description, hours
-            else:
-                return None, None, None
-        else:
-            # User cancelled or error
-            return None, None, None
+        
+        return None, None, None
             
-    except subprocess.TimeoutExpired:
-        print("[DSR Logger] Dialog timeout - using defaults")
-        return commit_msg, "", config.DEFAULT_TIME
-    except Exception as e:
-        print(f"[DSR Logger] Dialog error: {e} - using defaults")
-        return commit_msg, "", config.DEFAULT_TIME
+    except:
+        # Fallback to tkinter
+        return show_tkinter_dialog(commit_msg)
+
+
+def show_windows_dialog(commit_msg: str) -> tuple[Optional[str], Optional[str], Optional[float]]:
+    """
+    Windows dialog - uses tkinter for cross-platform consistency
+    """
+    return show_tkinter_dialog(commit_msg)
 
 
 def send_to_webhook(data: dict) -> tuple[bool, Optional[str]]:

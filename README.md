@@ -1,7 +1,7 @@
 # 🚀 Git Commit Logger for Google Sheets
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Platform: macOS](https://img.shields.io/badge/Platform-macOS-blue.svg)](https://www.apple.com/macos/)
+[![Platform: Cross-Platform](https://img.shields.io/badge/Platform-macOS%20|%20Windows%20|%20Linux-blue.svg)](https://www.python.org/)
 [![Python: 3.8+](https://img.shields.io/badge/Python-3.8+-green.svg)](https://www.python.org/)
 
 **Automatically log your Git commits to Google Sheets** with an interactive terminal or GUI dialog. Perfect for time tracking, daily status reports, and project management.
@@ -11,19 +11,21 @@
 ## ✨ Features
 
 - 📝 **Automatic Commit Logging** - Intercepts Git commits via pre-commit hook
-- 🎨 **Dual Interface** - Terminal prompts OR native macOS GUI dialogs
+- 🎨 **Professional GUI** - Single-form dialog with all fields (Terminal or GUI)
+- 🌍 **Cross-Platform** - Works on macOS, Windows, and Linux
 - 📊 **Google Sheets Integration** - Logs directly via Apps Script webhook
 - 🔒 **No API Credentials Needed** - Uses simple webhook approach
 - ⚡ **Never Blocks Commits** - Warns on failure but always allows commits
-- 🎯 **Smart Defaults** - Uses commit message as default, press Enter for quick commits
+- 🎯 **Smart Defaults** - Pre-filled with commit message, 1 hour default
 - 💡 **Cancel Support** - Abort commit anytime during input
+- 🖥️ **GUI Frameworks** - Native dialogs on macOS, tkinter on Windows/Linux
 
 ---
 
 ## 📋 Prerequisites
 
-- **macOS** (for GUI dialogs via AppleScript)
-- **Python 3.8+**
+- **Operating System**: macOS, Windows, or Linux
+- **Python 3.8+** (with tkinter for GUI on Windows/Linux)
 - **Git repository**
 - **Google account** with Google Sheets access
 
