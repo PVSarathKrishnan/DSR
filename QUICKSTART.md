@@ -1,147 +1,89 @@
-# 🚀 Quick Start Guide
+# ⚡ Quick Start - DSR Commit Logger
 
-## Step 1: Get Your Service Account Credentials
-
-1. **Go to Google Cloud Console**: https://console.cloud.google.com/
-2. **Create/Select Project**
-3. **Enable Google Sheets API**: APIs & Services → Library → Search "Google Sheets API" → Enable
-4. **Create Service Account**: APIs & Services → Credentials → Create Credentials → Service Account
-5. **Download JSON Key**: Click on service account → Keys → Add Key → Create new key → JSON
-6. **Save as `credentials.json`** in `/Users/uiuxateam/DSR/`
-
-## Step 2: Share Your Google Sheet
-
-1. Open `credentials.json`
-2. Copy the `client_email` value (looks like: `xxx@xxx.iam.gserviceaccount.com`)
-3. Open this sheet: https://docs.google.com/spreadsheets/d/14XEeW-EyuIEn4f1XVleAx9VAduxehHqUv7-rXszZqS0
-4. Click **Share**
-5. Paste the service account email
-6. Give **Editor** permissions
-7. Click Send
-
-## Step 3: Dependencies (Already Done! ✅)
-
-```bash
-pip3 install -r requirements.txt
-```
-
-## Step 4: Install in Your Git Repo
-
-```bash
-# Navigate to your project
-cd /path/to/your/git/repo
-
-# Run installer
-/Users/uiuxateam/DSR/install.sh
-
-# Or if DSR is your current directory:
-./install.sh /path/to/your/git/repo
-```
-
-## Step 5: Test It!
-
-```bash
-cd /path/to/your/git/repo
-echo "test" >> test.txt
-git add test.txt
-git commit -m "Testing commit logger"
-```
-
-You should see:
-```
-📝 Logging commit to Google Sheets...
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Commit Message: "Testing commit logger"
-
-Task Title [Testing commit logger]: 
-Task Description: Just testing
-Time Taken in hours [1.0]: 0.5
-
-✅ Logged to Google Sheets successfully!
-```
-
-## 🎯 What Gets Logged
-
-Each commit creates a row with:
-- **Date**: DD/MM/YYYY (e.g., 29/01/2026)
-- **Task Title**: From commit message or custom
-- **Task Description**: Your input
-- **Time Taken**: In hours (0.5, 1.0, etc.)
-- **Commit SHA**: "pending" (since we're in pre-commit)
+**Get started in 5 minutes!**
 
 ---
 
-## 🔧 Common Commands
+## 1️⃣ **Deploy Google Apps Script** (One Time)
 
-**Install in current directory:**
+1. Open your Google Sheet
+2. Extensions → Apps Script
+3. Paste the code from `apps_script_webhook.js`
+4. Deploy → New deployment → Web app
+5. Execute as: **Me** | Access: **Anyone**
+6. **Copy the Web App URL**
+
+---
+
+## 2️⃣ **Install in Your Project** (Each Project)
+
+### **macOS/Linux:**
 ```bash
-./install.sh
+cd /path/to/your/project
+cp /path/to/DSR/pre-commit-webhook .git/hooks/pre-commit
+chmod +x .git/hooks/pre-commit
+cp /path/to/DSR/webhook_config.example.py webhook_config.py
 ```
 
-**Install in specific repo:**
-```bash
-./install.sh /path/to/repo
-```
-
-**Uninstall:**
-```bash
-./install.sh --uninstall /path/to/repo
-```
-
-**Check if hook is installed:**
-```bash
-ls -la /path/to/repo/.git/hooks/pre-commit
+### **Windows:**
+```cmd
+cd C:\path\to\your\project
+copy C:\path\to\DSR\pre-commit-webhook .git\hooks\pre-commit
+copy C:\path\to\DSR\webhook_config.example.py webhook_config.py
 ```
 
 ---
 
-## ⚠️ Troubleshooting
+## 3️⃣ **Configure**
 
-### "Permission denied" error
-→ Make sure you shared the sheet with your service account email
+Edit `webhook_config.py`:
 
-### "Sheet not found" error
-→ Check that `SHEET_NAME = "Daily"` in `config.py` matches your sheet tab name
-
-### "credentials.json not found"
-→ Make sure `credentials.json` is in `/Users/uiuxateam/DSR/`
-
-### Hook not running
-→ Check if it's executable: `chmod +x /path/to/repo/.git/hooks/pre-commit`
-
----
-
-## 📝 Tips
-
-**Quick commits (just press Enter):**
-```bash
-git commit -m "Quick fix"
-# [Enter] [Enter] [Enter]
+```python
+WEBHOOK_URL = "YOUR_APPS_SCRIPT_URL_HERE"
+SHEET_NAME = "Daily"
+DEFAULT_TIME = 1.0
 ```
 
-**Detailed tracking:**
+---
+
+## 4️⃣ **Test**
+
 ```bash
-git commit -m "New feature"
-# Task Title: [Enter]
-# Task Description: Implemented X, Y, Z
-# Time: 2.5
+git commit -m "Test commit logger" --allow-empty
 ```
 
-**Cancel commit:**
-- Press `Ctrl+C` during prompts to abort
+Fill in the prompts and check your Google Sheet!
 
 ---
 
-## 🎨 Customization
+## ✅ **Done!**
 
-Edit `config.py` to change:
-- Sheet name (`SHEET_NAME`)
-- Default time (`DEFAULT_TIME`)
-- Time options (`TIME_OPTIONS`)
-- Colors and emojis
+Every commit now logs automatically to your Google Sheet.
+
+**Need more details?** See [SETUP.md](SETUP.md) for complete instructions.
 
 ---
 
-**Ready to go!** 🚀
+## 🎯 **What You Get**
 
-Next: Download your `credentials.json` and share the sheet!
+| Date | Task Title | Description | Time (hrs) | Commit SHA |
+|------|-----------|-------------|------------|------------|
+| 30/01/2026 | Fixed bug | Auth issue | 2.0 | pending |
+
+---
+
+## 🔧 **Common Issues**
+
+**Hook not running?**
+- macOS/Linux: `chmod +x .git/hooks/pre-commit`
+- Windows: Check Python in PATH
+
+**"Webhook URL not configured"?**
+- Edit `webhook_config.py` and set `WEBHOOK_URL`
+
+**"Sheet not found"?**
+- Match `SHEET_NAME` in config with your sheet tab name
+
+---
+
+**Questions?** See [SETUP.md](SETUP.md) or [README.md](README.md)

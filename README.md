@@ -32,6 +32,14 @@
 
 ---
 
+## 📚 **Documentation**
+
+- **[⚡ Quick Start](QUICKSTART.md)** - Get started in 5 minutes
+- **[📖 Complete Setup Guide](SETUP.md)** - Detailed cross-platform instructions
+- **[🔄 Changes Log](CHANGES.md)** - Recent updates and version history
+
+---
+
 ## 🚀 Quick Start
 
 ### 1. Deploy Apps Script Webhook
