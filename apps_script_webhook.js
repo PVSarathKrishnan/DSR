@@ -34,9 +34,22 @@ function doPost(e) {
             })).setMimeType(ContentService.MimeType.JSON);
         }
 
+        // Parse the date string (DD/MM/YYYY) to a Date object for Google Sheets
+        let dateValue = data.date;
+        if (typeof data.date === 'string' && data.date.includes('/')) {
+            // Parse DD/MM/YYYY format
+            const parts = data.date.split('/');
+            if (parts.length === 3) {
+                const day = parseInt(parts[0], 10);
+                const month = parseInt(parts[1], 10) - 1; // Month is 0-indexed
+                const year = parseInt(parts[2], 10);
+                dateValue = new Date(year, month, day);
+            }
+        }
+
         // Prepare row data  [Date, Title, Description, Hours, SHA]
         const row = [
-            data.date || "",
+            dateValue,  // Now a Date object
             data.title || "",
             data.description || "",
             data.hours || 1.0,

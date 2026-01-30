@@ -115,7 +115,8 @@ def validate_time(time_str: str) -> float:
 
 def show_gui_dialog(commit_msg: str) -> tuple[Optional[str], Optional[str], Optional[float]]:
     """
-    Show GUI dialog for commit details (works on macOS and Windows)
+    Show GUI dialog for commit details
+    Uses platform-appropriate dialogs
     
     Args:
         commit_msg: The commit message to use as default title
@@ -124,27 +125,30 @@ def show_gui_dialog(commit_msg: str) -> tuple[Optional[str], Optional[str], Opti
         Tuple of (title, description, hours) or (None, None, None) if cancelled
     """
     import platform
-    import subprocess
     
-    system = platform.system()
-    
-    if system == "Darwin":  # macOS
-        return show_macos_dialog(commit_msg)
-    elif system == "Windows":
-        return show_windows_dialog(commit_msg)
-    else:  # Linux or other
+    # macOS: Use AppleScript (tkinter doesn't render from Git hooks)
+    # Windows/Linux: Use tkinter
+    if platform.system() == "Darwin":
+        return show_macos_dialog_simple(commit_msg)
+    else:
         return show_tkinter_dialog(commit_msg)
 
 
 def show_tkinter_dialog(commit_msg: str) -> tuple[Optional[str], Optional[str], Optional[float]]:
     """
-    Cross-platform GUI dialog using tkinter (Windows, Linux, macOS fallback)
+    Cross-platform GUI dialog using tkinter - ALL 3 FIELDS IN ONE WINDOW
     Returns (None, None, None) if "Skip Logging" is clicked
     Returns (None, None, -1) if "Cancel" is clicked
     """
     try:
         import tkinter as tk
         from tkinter import ttk
+        import platform
+        
+        # macOS-specific fix: Ensure tkinter can run
+        if platform.system() == "Darwin":
+            import os
+            os.environ['TK_SILENCE_DEPRECATION'] = '1'
         
         result = {"cancelled": True, "skip": False, "title": "", "description": "", "hours": config.DEFAULT_TIME}
         
@@ -168,7 +172,13 @@ def show_tkinter_dialog(commit_msg: str) -> tuple[Optional[str], Optional[str], 
         # Create main window
         root = tk.Tk()
         root.title("DSR Commit Logger")
-        root.geometry("500x400")
+        
+        # Configure root window grid
+        root.grid_rowconfigure(0, weight=1)
+        root.grid_columnconfigure(0, weight=1)
+        
+        # Set window size
+        root.geometry("500x450")
         root.resizable(False, False)
         
         # Set window icon (optional)
@@ -180,6 +190,7 @@ def show_tkinter_dialog(commit_msg: str) -> tuple[Optional[str], Optional[str], 
         # Main frame with padding
         main_frame = ttk.Frame(root, padding="20")
         main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        
         
         # Title
         title_label = ttk.Label(main_frame, text="📝 Log Commit to Google Sheets", font=("Helvetica", 14, "bold"))
@@ -234,6 +245,15 @@ def show_tkinter_dialog(commit_msg: str) -> tuple[Optional[str], Optional[str], 
         y = (root.winfo_screenheight() // 2) - (root.winfo_height() // 2)
         root.geometry(f'+{x}+{y}')
         
+        # macOS-specific: Bring window to front and focus
+        root.lift()
+        root.attributes('-topmost', True)
+        root.after(100, lambda: root.attributes('-topmost', False))
+        root.focus_force()
+        
+        # Force update to ensure widgets are rendered
+        root.update()
+        
         # Run dialog
         root.mainloop()
         
@@ -250,10 +270,12 @@ def show_tkinter_dialog(commit_msg: str) -> tuple[Optional[str], Optional[str], 
         return commit_msg, "", config.DEFAULT_TIME
 
 
-def show_macos_dialog(commit_msg: str) -> tuple[Optional[str], Optional[str], Optional[float]]:
+def show_macos_dialog_simple(commit_msg: str) -> tuple[Optional[str], Optional[str], Optional[float]]:
     """
-    macOS native dialog using AppleScript - Single comprehensive form
-    Returns (None, None, None) if user clicks "Skip Logging"
+    macOS native dialog using AppleScript - 3 separate dialogs
+    - First dialog has "Commit Without Logging" button
+    - All Cancel buttons show confirmation before aborting
+    Returns (None, None, None) if user commits without logging
     Returns (None, None, -1) if user cancels
     """
     import subprocess
@@ -261,74 +283,165 @@ def show_macos_dialog(commit_msg: str) -> tuple[Optional[str], Optional[str], Op
     # Escape for AppleScript
     escaped_msg = commit_msg.replace('"', '\\"').replace('\\', '\\\\')
     
-    # Comprehensive single-page form with Skip option
-    applescript = f'''
+    # Dialog 1: Task Title with "Commit Without Logging" button
+    applescript_title = f'''
     set defaultTitle to "{escaped_msg}"
-    set defaultTime to "{config.DEFAULT_TIME}"
-    set defaultDesc to ""
-    
-    -- Single comprehensive dialog
-    set formText to "Enter commit details below:" & return & return & "Task Title:"
-    set userInput to display dialog formText & return & defaultTitle & return & return & "Description (optional):" & return & defaultDesc & return & return & "Time (hours): " & defaultTime default answer defaultTitle & return & defaultDesc & return & defaultTime buttons {{"Skip Logging", "Cancel", "Log to Sheets"}} default button "Log to Sheets" cancel button "Cancel" with title "📝 DSR Commit Logger"
-    
-    set buttonChoice to button returned of userInput
-    set userText to text returned of userInput
-    
-    -- Handle Skip Logging
-    if buttonChoice is "Skip Logging" then
-        return "SKIP_LOGGING"
-    end if
-    
-    -- Parse the multi-line input
-    set AppleScript's text item delimiters to return
-    set inputLines to text items of userText
-    set AppleScript's text item delimiters to ""
-    
-    -- Extract values (expecting 5 lines: title, empty, desc, empty, time)
-    set taskTitle to item 1 of inputLines
-    set taskDesc to ""
-    set taskTime to "{config.DEFAULT_TIME}"
-    
-    if (count of inputLines) >= 3 then
-        set taskDesc to item 3 of inputLines
-    end if
-    
-    if (count of inputLines) >= 5 then
-        set taskTime to item 5 of inputLines
-    end if
-    
-    return taskTitle & "|SEPARATOR|" & taskDesc & "|SEPARATOR|" & taskTime
+    try
+        set userDialog to display dialog "Task Title:" default answer defaultTitle buttons {{"Commit Without Logging", "Cancel", "Next"}} default button "Next" with title "📝 DSR Commit Logger (1/3)"
+        
+        set buttonChoice to button returned of userDialog
+        
+        -- Handle "Commit Without Logging"
+        if buttonChoice is "Commit Without Logging" then
+            return "SKIP_LOGGING"
+        end if
+        
+        -- Handle "Next"
+        return text returned of userDialog
+        
+    on error number -128
+        -- User clicked Cancel - ask for confirmation
+        set confirmDialog to display dialog "Do you want to commit without logging?" buttons {{"No, Abort Commit", "Yes, Commit Without Logging"}} default button "Yes, Commit Without Logging" with title "Cancel Confirmation"
+        
+        if button returned of confirmDialog is "Yes, Commit Without Logging" then
+            return "SKIP_LOGGING"
+        else
+            error number -128
+        end if
+    end try
     '''
     
     try:
         result = subprocess.run(
-            ['osascript', '-e', applescript],
+            ['osascript', '-e', applescript_title],
             capture_output=True,
             text=True,
-            timeout=300
+            timeout=120
         )
         
-        if result.returncode == 0:
-            output = result.stdout.strip()
-            
-            # Check for skip logging
-            if output == "SKIP_LOGGING":
-                return None, None, None  # Skip logging but proceed with commit
-            
-            parts = output.split('|SEPARATOR|')
-            
-            if len(parts) == 3:
-                title = parts[0].strip()
-                description = parts[1].strip()
-                hours = validate_time(parts[2].strip())
-                return title, description, hours
+        if result.returncode != 0:
+            return None, None, -1.0  # User chose to abort
         
-        # User cancelled
-        return None, None, -1.0
-            
+        title = result.stdout.strip()
+        
+        # Check for skip
+        if title == "SKIP_LOGGING":
+            return None, None, None
+        
+    except subprocess.TimeoutExpired:
+        print("[DSR Logger] Dialog timeout - using defaults")
+        return commit_msg, "", config.DEFAULT_TIME
+    except Exception as e:
+        print(f"[DSR Logger] Dialog error: {e}")
+        return commit_msg, "", config.DEFAULT_TIME
+    
+    # Dialog 2: Description with "Commit Without Logging" button
+    applescript_desc = '''
+    try
+        set descDialog to display dialog "Description (optional):" default answer "" buttons {"Commit Without Logging", "Cancel", "Next"} default button "Next" with title "📝 DSR Commit Logger (2/3)"
+        
+        set buttonChoice to button returned of descDialog
+        
+        -- Handle "Commit Without Logging"
+        if buttonChoice is "Commit Without Logging" then
+            return "SKIP_LOGGING"
+        end if
+        
+        return text returned of descDialog
+        
+    on error number -128
+        -- User clicked Cancel - ask for confirmation
+        set confirmDialog to display dialog "Do you want to commit without logging?" buttons {{"No, Abort Commit", "Yes, Commit Without Logging"}} default button "Yes, Commit Without Logging" with title "Cancel Confirmation"
+        
+        if button returned of confirmDialog is "Yes, Commit Without Logging" then
+            return "SKIP_LOGGING"
+        else
+            error number -128
+        end if
+    end try
+    '''
+    
+    try:
+        result = subprocess.run(
+            ['osascript', '-e', applescript_desc],
+            capture_output=True,
+            text=True,
+            timeout=120
+        )
+        
+        if result.returncode != 0:
+            return None, None, -1.0  # User chose to abort
+        
+        description = result.stdout.strip()
+        
+        # Check for skip from cancel confirmation
+        if description == "SKIP_LOGGING":
+            return None, None, None
+        
     except:
-        # Fallback to tkinter
-        return show_tkinter_dialog(commit_msg)
+        description = ""
+    
+    # Dialog 3: Time with "Commit Without Logging" button
+    applescript_time = f'''
+    set defaultTime to "{config.DEFAULT_TIME}"
+    try
+        set timeDialog to display dialog "Time Taken (hours):" default answer defaultTime buttons {{"Commit Without Logging", "Cancel", "Log to Sheets"}} default button "Log to Sheets" with title "📝 DSR Commit Logger (3/3)"
+        
+        set buttonChoice to button returned of timeDialog
+        
+        -- Handle "Commit Without Logging"
+        if buttonChoice is "Commit Without Logging" then
+            return "SKIP_LOGGING"
+        end if
+        
+        return text returned of timeDialog
+        
+    on error number -128
+        -- User clicked Cancel - ask for confirmation
+        set confirmDialog to display dialog "Do you want to commit without logging?" buttons {{"No, Abort Commit", "Yes, Commit Without Logging"}} default button "Yes, Commit Without Logging" with title "Cancel Confirmation"
+        
+        if button returned of confirmDialog is "Yes, Commit Without Logging" then
+            return "SKIP_LOGGING"
+        else
+            error number -128
+        end if
+    end try
+    '''
+    
+    try:
+        result = subprocess.run(
+            ['osascript', '-e', applescript_time],
+            capture_output=True,
+            text=True,
+            timeout=120
+        )
+        
+        if result.returncode != 0:
+            return None, None, -1.0  # User chose to abort
+        
+        time_str = result.stdout.strip()
+        
+        # Check for skip from cancel confirmation
+        if time_str == "SKIP_LOGGING":
+            return None, None, None
+        
+        hours = validate_time(time_str)
+        
+        return title, description, hours
+        
+    except:
+        return title, description, config.DEFAULT_TIME
+
+
+def show_macos_dialog(commit_msg: str) -> tuple[Optional[str], Optional[str], Optional[float]]:
+    """
+    DEPRECATED: Old single-dialog approach - kept for reference
+    macOS native dialog using AppleScript - Single comprehensive form
+    Returns (None, None, None) if user clicks "Skip Logging"
+    Returns (None, None, -1) if user cancels
+    """
+    # This function is now replaced by show_macos_dialog_simple
+    return show_macos_dialog_simple(commit_msg)
 
 
 def show_windows_dialog(commit_msg: str) -> tuple[Optional[str], Optional[str], Optional[float]]:

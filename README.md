@@ -291,4 +291,14 @@ Created for efficient commit tracking and daily status reporting.
 
 ---
 
+
+to test
+
+cd /Users/uiuxateam/my-property-flutter-app
+
+cp /Users/uiuxateam/DSR/pre-commit-webhook .git/hooks/pre-commit
+
+chmod +x .git/hooks/pre-commit
+
+git commit -m "Test dialog with all fields visible" --allow-empty
 **Star ⭐ this repo if it helps your workflow!**
