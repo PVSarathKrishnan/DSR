@@ -544,13 +544,26 @@ def main():
     # Get current date
     current_date = datetime.now().strftime(config.DATE_FORMAT)
     
-    # Prepare data for webhook
+    # Get current Git branch
+    try:
+        import subprocess
+        result = subprocess.run(
+            ['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        branch = result.stdout.strip() if result.returncode == 0 else 'main'
+    except:
+        branch = 'main'
+    
+    # Prepare data for webhook - NEW FORMAT (matches Apps Script)
     webhook_data = {
-        "date": current_date,
-        "title": task_title,
-        "description": task_description,
-        "hours": time_taken,
-        "sha": "pending"
+        "taskName": task_title,
+        "commitMessage": task_description,
+        "time": time_taken,
+        "status": "In Progress",  # Default status
+        "branch": branch
     }
     
     # Send to webhook

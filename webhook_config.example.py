@@ -5,7 +5,8 @@ IMPORTANT: Copy this file to your project root as webhook_config.py and update w
 
 # Apps Script Web App URL - Get this after deploying your Apps Script
 # Format: https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec
-WEBHOOK_URL = ""  # ⚠️ REQUIRED: Paste your deployed Web App URL here
+# Current deployed URL (Version 7 - Feb 2, 2026):
+WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbwy710fP4h3Kzb5J0KJFIpQ6Kh7xqhUlhlejLuouXas3-UWVBBmm8fhEU8l6pZcMu8CEQ/exec"
 
 # Request timeout (seconds)
 REQUEST_TIMEOUT = 10

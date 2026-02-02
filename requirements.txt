@@ -1,4 +1,11 @@
-google-auth==2.23.0
-google-auth-oauthlib==1.1.0
-google-auth-httplib2==0.1.1
-google-api-python-client==2.100.0
+# DSR Commit Logger - Python Dependencies
+
+# GUI Framework (Optional - for beautiful single dialog)
+# Install with: pip install -r requirements.txt
+PyQt5>=5.15.0
+
+# Alternative if PyQt5 doesn't work:
+# PySide6>=6.0.0
+
+# Note: The hook works without these (falls back to AppleScript/terminal mode)
+# But PyQt5 gives you a beautiful single dialog with all fields
