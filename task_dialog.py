@@ -657,6 +657,33 @@ def show_pyqt5_task_dialog(webhook_url: str, commit_msg: str, branch: str, defau
         )
 
 
+def send_to_webhook(webhook_url: str, data: dict) -> tuple[bool, Optional[str]]:
+    """
+    Send commit data to Apps Script webhook
+    """
+    if not webhook_url or "YOUR_ID" in webhook_url:
+        return False, "Webhook URL not configured"
+    
+    try:
+        json_data = json.dumps(data).encode('utf-8')
+        req = urllib.request.Request(
+            webhook_url,
+            data=json_data,
+            headers={'Content-Type': 'application/json'},
+            method='POST'
+        )
+        
+        with urllib.request.urlopen(req, timeout=10) as response:
+            response_data = json.loads(response.read().decode('utf-8'))
+            if response_data.get('success'):
+                return True, None
+            else:
+                return False, response_data.get('error', 'Unknown error')
+                
+    except Exception as e:
+        return False, str(e)
+
+
 # For testing
 if __name__ == '__main__':
     import sys
@@ -698,23 +725,40 @@ if __name__ == '__main__':
         task, commit, time, branch, status = show_pyqt5_task_dialog(webhook_url, commit_msg, branch, default_time)
         
         # LOGIC FIX: Distinguish between CANCEL (None) and SKIP (Empty String)
-        
         if task is None:
-            # User clicked Cancel or closed window -> ABORT COMMIT
+            # User clicked Cancel -> ABORT COMMIT
             print("Dialog cancelled - Aborting commit.")
             sys.exit(1)
             
         elif task == "":
-            # User clicked Skip Logging -> PROCEED but don't modify message
+            # User clicked Skip Logging -> PROCEED but don't log
             print("⏭️  Skipped logging - proceeding with commit")
             sys.exit(0)
             
         else:
-            # User submitted task -> PROCEED and UPDATE message
-            # Format: title + description
+            # 1. Update commit message locally
             full_message = f"{commit}\n\nTask: {task}\nTime: {time}h\nStatus: {status}"
             with open(commit_msg_file, 'w') as f:
                 f.write(full_message)
+            
+            # 2. Log to Google Sheets (Webhook)
+            print("Logging to Sheets...")
+            webhook_data = {
+                "taskName": task,
+                "commitMessage": commit,
+                "time": time,
+                "status": status,
+                "branch": branch
+            }
+            
+            success, error = send_to_webhook(webhook_url, webhook_data)
+            
+            if success:
+                print("✅ Logged to Google Sheets successfully!")
+            else:
+                print(f"⚠️ Failed to log to Sheets: {error}")
+                # We still exit 0 because the commit itself is fine
+            
             sys.exit(0)
 
     else:
