@@ -1,0 +1,479 @@
+#!/usr/bin/env python3
+"""
+Git Pre-Commit Hook - NEW VERSION with Task Management
+Logs commit information to Google Sheets via Webhook with CRUD task management
+"""
+
+import sys
+import os
+import json
+from datetime import datetime
+from typing import Optional, Tuple
+import urllib.request
+import urllib.error
+
+# Add the parent directory to Python path to import our modules
+hook_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(os.path.dirname(hook_dir))
+sys.path.insert(0, parent_dir)
+
+try:
+    import webhook_config as config
+except ImportError as e:
+    print(f"❌ Error importing webhook_config: {e}")
+    print("Make sure webhook_config.py is in the parent directory")
+    sys.exit(0)  # Allow commit to proceed
+
+
+def is_interactive_terminal() -> bool:
+    """Check if running in an interactive terminal (not GUI)"""
+    return sys.stdin.isatty() and sys.stdout.isatty()
+
+
+def print_colored(message: str, color: str = config.COLOR_RESET):
+    """Print colored message to terminal"""
+    print(f"{color}{message}{config.COLOR_RESET}")
+
+
+def get_commit_message() -> Optional[str]:
+    """Extract commit message from Git"""
+    try:
+        git_dir = os.path.join(os.getcwd(), '.git')
+        commit_msg_file = os.path.join(git_dir, 'COMMIT_EDITMSG')
+        
+        if os.path.exists(commit_msg_file):
+            with open(commit_msg_file, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith('#'):
+                        return line
+        return None
+    except:
+        return None
+
+
+def validate_time(time_str: str) -> float:
+    """Validate and parse time input"""
+    try:
+        time_value = float(time_str)
+        return time_value if time_value > 0 else config.DEFAULT_TIME
+    except ValueError:
+        return config.DEFAULT_TIME
+
+
+def show_task_dialog(commit_msg: str) -> Tuple[Optional[str], Optional[str], Optional[float], Optional[str]]:
+    """
+    Show comprehensive task management dialog
+    Returns: (task, description, hours, status) or (None, None, None, None) if skipped
+    """
+    try:
+        import tkinter as tk
+        from tkinter import ttk, messagebox, simpledialog
+        import platform
+        
+        if platform.system() == "Darwin":
+            os.environ['TK_SILENCE_DEPRECATION'] = '1'
+        
+        result = {
+            "cancelled": True,
+            "skip": False,
+            "task": "",
+            "description": "",
+            "hours": config.DEFAULT_TIME,
+            "status": "In Progress"
+        }
+        
+        # ============= API FUNCTIONS =============
+        
+        def fetch_tasks():
+            """Fetch tasks from Google Sheets"""
+            try:
+                url = f"{config.WEBHOOK_URL}?action=getTasks"
+                with urllib.request.urlopen(url, timeout=10) as response:
+                    data = json.loads(response.read().decode('utf-8'))
+                    if data.get('success'):
+                        return [task['name'] for task in data.get('tasks', [])]
+                return []
+            except Exception as e:
+                print(f"[DSR] Error fetching tasks: {e}")
+                return []
+        
+        def create_task_api(task_name):
+            """Create new task via API"""
+            try:
+                data = json.dumps({"action": "createTask", "taskName": task_name}).encode('utf-8')
+                req = urllib.request.Request(
+                    config.WEBHOOK_URL,
+                    data=data,
+                    headers={'Content-Type': 'application/json'},
+                    method='POST'
+                )
+                with urllib.request.urlopen(req, timeout=10) as response:
+                    res_data = json.loads(response.read().decode('utf-8'))
+                    return res_data.get('success', False), res_data.get('message', res_data.get('error', ''))
+            except Exception as e:
+                return False, str(e)
+        
+        def update_task_api(old_name, new_name):
+            """Update task via API"""
+            try:
+                data = json.dumps({"action": "updateTask", "oldName": old_name, "newName": new_name}).encode('utf-8')
+                req = urllib.request.Request(
+                    config.WEBHOOK_URL,
+                    data=data,
+                    headers={'Content-Type': 'application/json'},
+                    method='POST'
+                )
+                with urllib.request.urlopen(req, timeout=10) as response:
+                    res_data = json.loads(response.read().decode('utf-8'))
+                    return res_data.get('success', False), res_data.get('message', res_data.get('error', ''))
+            except Exception as e:
+                return False, str(e)
+        
+        def delete_task_api(task_name):
+            """Delete task via API"""
+            try:
+                data = json.dumps({"action": "deleteTask", "taskName": task_name}).encode('utf-8')
+                req = urllib.request.Request(
+                    config.WEBHOOK_URL,
+                    data=data,
+                    headers={'Content-Type': 'application/json'},
+                    method='POST'
+                )
+                with urllib.request.urlopen(req, timeout=10) as response:
+                    res_data = json.loads(response.read().decode('utf-8'))
+                    return res_data.get('success', False), res_data.get('message', res_data.get('error', ''))
+            except Exception as e:
+                return False, str(e)
+        
+        #============= DIALOG CALLBACKS =============
+        
+        def on_create_task():
+            """Create new task"""
+            new_task = simpledialog.askstring("Create Task", "Enter task name:", parent=root)
+            if new_task and new_task.strip():
+                new_task = new_task.strip()
+                success, msg = create_task_api(new_task)
+                if success:
+                    tasks = fetch_tasks()
+                    task_combo['values'] = tasks if tasks else ["Create a task here"]
+                    task_var.set(new_task)
+                    if tasks:
+                        edit_btn.config(state='normal')
+                        delete_btn.config(state='normal')
+                    messagebox.showinfo("Success", msg, parent=root)
+                else:
+                    messagebox.showerror("Error", msg, parent=root)
+        
+        def on_edit_task():
+            """Edit selected task"""
+            current_task = task_var.get()
+            if not current_task or current_task == "Create a task here":
+                messagebox.showwarning("No Task", "Please select a task to edit", parent=root)
+                return
+            
+            new_name = simpledialog.askstring("Edit Task", f"Rename '{current_task}' to:",
+                                              initialvalue=current_task, parent=root)
+            if new_name and new_name.strip() and new_name != current_task:
+                new_name = new_name.strip()
+                success, msg = update_task_api(current_task, new_name)
+                if success:
+                    tasks = fetch_tasks()
+                    task_combo['values'] = tasks if tasks else ["Create a task here"]
+                    task_var.set(new_name)
+                    messagebox.showinfo("Success", msg, parent=root)
+                else:
+                    messagebox.showerror("Error", msg, parent=root)
+        
+        def on_delete_task():
+            """Delete selected task"""
+            current_task = task_var.get()
+            if not current_task or current_task == "Create a task here":
+                messagebox.showwarning("No Task", "Please select a task to delete", parent=root)
+                return
+            
+            confirm = messagebox.askyesno("Confirm Delete",
+                                         f"Are you sure you want to delete '{current_task}'?",
+                                         parent=root)
+            if confirm:
+                success, msg = delete_task_api(current_task)
+                if success:
+                    tasks = fetch_tasks()
+                    task_combo['values'] = tasks if tasks else ["Create a task here"]
+                    task_var.set(tasks[0] if tasks else "Create a task here")
+                    if not tasks:
+                        edit_btn.config(state='disabled')
+                        delete_btn.config(state='disabled')
+                    messagebox.showinfo("Success", msg, parent=root)
+                else:
+                    messagebox.showerror("Error", msg, parent=root)
+        
+        def on_submit():
+            task = task_var.get()
+            if not task or task == "Create a task here":
+                messagebox.showwarning("No Task", "Please select or create a task", parent=root)
+                return
+            
+            result["cancelled"] = False
+            result["skip"] = False
+            result["task"] = task
+            result["description"] = desc_text.get("1.0", "end-1c")
+            result["hours"] = hours_var.get()
+            result["status"] = status_var.get()
+            root.destroy()
+        
+        def on_skip():
+            result["cancelled"] = False
+            result["skip"] = True
+            root.destroy()
+        
+        def on_cancel():
+            result["cancelled"] = True
+            root.destroy()
+        
+        # ============= CREATE DIALOG =============
+        
+        # Fetch tasks
+        tasks = fetch_tasks()
+        
+        # Create main window
+        root = tk.Tk()
+        root.title("DSR Commit Logger")
+        root.geometry("550x580")
+        root.resizable(False, False)
+        
+        # Main frame
+        main_frame = ttk.Frame(root, padding="20")
+        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        
+        # Title
+        ttk.Label(main_frame, text="📝 DSR Commit Logger",
+                 font=("Helvetica", 14, "bold")).grid(row=0, column=0, columnspan=4, pady=(0, 20))
+        
+        # Task Selection
+        row = 1
+        ttk.Label(main_frame, text="Task: *", font=("Helvetica", 10, "bold")).grid(
+            row=row, column=0, sticky=tk.W, pady=(0, 5), columnspan=4)
+        
+        row += 1
+        task_frame = ttk.Frame(main_frame)
+        task_frame.grid(row=row, column=0, columnspan=4, sticky=(tk.W, tk.E), pady=(0, 15))
+        
+        task_var = tk.StringVar()
+        if tasks:
+            task_var.set(tasks[0])
+            task_combo = ttk.Combobox(task_frame, textvariable=task_var,
+                                     values=tasks, width=35, state="readonly")
+        else:
+            task_var.set("Create a task here")
+            task_combo = ttk.Combobox(task_frame, textvariable=task_var,
+                                     values=["Create a task here"], width=35, state="readonly")
+        task_combo.pack(side=tk.LEFT, padx=(0, 5))
+        
+        # CRUD Buttons
+        create_btn = ttk.Button(task_frame, text="+ New", command=on_create_task, width=7)
+        create_btn.pack(side=tk.LEFT, padx=2)
+        
+        edit_btn = ttk.Button(task_frame, text="✏️ Edit", command=on_edit_task, width=7)
+        edit_btn.pack(side=tk.LEFT, padx=2)
+        if not tasks:
+            edit_btn.config(state='disabled')
+        
+        delete_btn = ttk.Button(task_frame, text="🗑️ Del", command=on_delete_task, width=7)
+        delete_btn.pack(side=tk.LEFT, padx=2)
+        if not tasks:
+            delete_btn.config(state='disabled')
+        
+        # Commit Message
+        row += 1
+        ttk.Label(main_frame, text="Commit Message: * (editable)",
+                 font=("Helvetica", 10, "bold")).grid(
+            row=row, column=0, sticky=tk.W, pady=(0, 5), columnspan=4)
+        
+        row += 1
+        desc_text = tk.Text(main_frame, width=55, height=6, font=("Helvetica", 10))
+        desc_text.grid(row=row, column=0, columnspan=4, pady=(0, 15))
+        desc_text.insert("1.0", commit_msg)
+        
+        # Time & Status
+        row += 1
+        
+        # Time (left)
+        time_frame = ttk.Frame(main_frame)
+        time_frame.grid(row=row, column=0, columnspan=2, sticky=tk.W, pady=(0, 15))
+        
+        ttk.Label(time_frame, text="Time (hours): *",
+                 font=("Helvetica", 10, "bold")).pack(anchor=tk.W)
+        
+        hours_var = tk.DoubleVar(value=config.DEFAULT_TIME)
+        hours_spinbox = ttk.Spinbox(time_frame, from_=0.1, to=24.0, increment=0.5,
+                                   textvariable=hours_var, width=12)
+        hours_spinbox.pack(anchor=tk.W, pady=(5, 0))
+        
+        # Status (right)
+        status_frame = ttk.Frame(main_frame)
+        status_frame.grid(row=row, column=2, columnspan=2, sticky=tk.W, pady=(0, 15), padx=(20, 0))
+        
+        ttk.Label(status_frame, text="Status: *",
+                 font=("Helvetica", 10, "bold")).pack(anchor=tk.W)
+        
+        status_var = tk.StringVar(value="In Progress")
+        status_inner = ttk.Frame(status_frame)
+        status_inner.pack(anchor=tk.W, pady=(5, 0))
+        
+        ttk.Radiobutton(status_inner, text="In Progress",
+                       variable=status_var, value="In Progress").pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Radiobutton(status_inner, text="Completed",
+                       variable=status_var, value="Completed").pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Radiobutton(status_inner, text="Blocked",
+                       variable=status_var, value="Blocked").pack(side=tk.LEFT)
+        
+        # Branch Info
+        row += 1
+        try:
+            import subprocess
+            branch_result = subprocess.run(['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
+                                          capture_output=True, text=True, timeout=2)
+            branch = branch_result.stdout.strip() if branch_result.returncode == 0 else 'main'
+        except:
+            branch = 'main'
+        
+        ttk.Label(main_frame, text=f"Branch: {branch} (auto-detected)",
+                 font=("Helvetica", 9), foreground="gray").grid(
+            row=row, column=0, columnspan=4, sticky=tk.W, pady=(0, 20))
+        
+        # Buttons
+        row += 1
+        button_frame = ttk.Frame(main_frame)
+        button_frame.grid(row=row, column=0, columnspan=4)
+        
+        ttk.Button(button_frame, text="Skip Logging", command=on_skip, width=12).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="Cancel", command=on_cancel, width=12).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="Log to Sheets", command=on_submit, width=15).pack(side=tk.LEFT, padx=5)
+        
+        # Keyboard shortcuts
+        root.bind('<Return>', lambda e: on_submit() if e.widget != desc_text else None)
+        root.bind('<Escape>', lambda e: on_cancel())
+        
+        # Center window
+        root.update_idletasks()
+        x = (root.winfo_screenwidth() // 2) - (root.winfo_width() // 2)
+        y = (root.winfo_screenheight() // 2) - (root.winfo_height() // 2)
+        root.geometry(f'+{x}+{y}')
+        
+        # Bring to front (macOS)
+        root.lift()
+        root.attributes('-topmost', True)
+        root.after(100, lambda: root.attributes('-topmost', False))
+        root.focus_force()
+        desc_text.focus()
+        
+        # Run dialog
+        root.mainloop()
+        
+        # Return results
+        if result["skip"]:
+            return None, None, None, None
+        elif result["cancelled"]:
+            return None, None, -1.0, None
+        else:
+            hours = validate_time(str(result["hours"]))
+            return result["task"], result["description"], hours, result["status"]
+            
+    except Exception as e:
+        print(f"[DSR Logger] GUI error: {e} - using defaults")
+        return commit_msg, "", config.DEFAULT_TIME, "In Progress"
+
+
+def send_to_webhook(data: dict) -> Tuple[bool, Optional[str]]:
+    """Send commit data to Apps Script webhook"""
+    if not config.WEBHOOK_URL:
+        return False, "Webhook URL not configured"
+    
+    try:
+        json_data = json.dumps(data).encode('utf-8')
+        req = urllib.request.Request(
+            config.WEBHOOK_URL,
+            data=json_data,
+            headers={'Content-Type': 'application/json'},
+            method='POST'
+        )
+        
+        with urllib.request.urlopen(req, timeout=config.REQUEST_TIMEOUT) as response:
+            response_data = json.loads(response.read().decode('utf-8'))
+            if response_data.get('success'):
+                return True, None
+            else:
+                return False, response_data.get('error', 'Unknown error')
+    except Exception as e:
+        return False, str(e)
+
+
+def main():
+    """Main hook execution"""
+    interactive = is_interactive_terminal()
+    commit_msg = get_commit_message() or "Commit"
+    
+    if interactive:
+        # Terminal mode - simple prompts
+        print()
+        print_colored("📝 Logging commit to Google Sheets...", config.COLOR_BLUE)
+        print(f"Commit: \"{commit_msg}\"")
+        print()
+        # TODO: Add terminal-based task selection
+        task = input("Task: ")
+        description = input("Description: ")
+        hours = float(input(f"Hours [{config.DEFAULT_TIME}]: ") or config.DEFAULT_TIME)
+        status = "In Progress"
+    else:
+        # GUI mode
+        print("[DSR Logger] Opening task dialog...")
+        task, description, hours, status = show_task_dialog(commit_msg)
+        
+        if hours == -1.0:
+            print("[DSR Logger] ❌ Cancelled by user")
+            sys.exit(1)
+        
+        if task is None:
+            print("[DSR Logger] ⏭️  Skipped logging - proceeding with commit")
+            sys.exit(0)
+        
+        print(f"[DSR Logger] Logging: {task[:50]}...")
+    
+    # Get current branch
+    try:
+        import subprocess
+        result = subprocess.run(['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
+                              capture_output=True, text=True, timeout=5)
+        branch = result.stdout.strip() if result.returncode == 0 else 'main'
+    except:
+        branch = 'main'
+    
+    # Prepare data for webhook
+    webhook_data = {
+        "taskName": task,
+        "commitMessage": description,
+        "time": hours,
+        "status": status,
+        "branch": branch
+    }
+    
+    # Send to webhook
+    success, error_msg = send_to_webhook(webhook_data)
+    
+    if interactive:
+        if success:
+            print_colored("✅ Logged to Google Sheets successfully!", config.COLOR_GREEN)
+        else:
+            print_colored(f"⚠️ Failed: {error_msg}", config.COLOR_YELLOW)
+    else:
+        if success:
+            print("[DSR Logger] ✓ Logged successfully")
+        else:
+            print(f"[DSR Logger] ⚠ Warning: {error_msg}")
+    
+    sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()

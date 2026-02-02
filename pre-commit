@@ -1,0 +1,145 @@
+#!/usr/bin/env python3
+"""
+Git Pre-Commit Hook - Task Management with PyQt5 Dialog
+"""
+
+import sys
+import os
+import json
+from datetime import datetime
+from typing import Optional, Tuple
+import urllib.request
+import urllib.error
+import subprocess
+
+# Add parent directory to path
+hook_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(os.path.dirname(hook_dir))
+sys.path.insert(0, parent_dir)
+
+try:
+    import webhook_config as config
+except ImportError as e:
+    print(f"❌ Error importing webhook_config: {e}")
+    sys.exit(0)
+
+# Try to import PyQt5 dialog
+try:
+    sys.path.insert(0, parent_dir)  # For task_dialog.py
+    from task_dialog import show_pyqt5_task_dialog, PYQT5_AVAILABLE
+    HAS_DIALOG = PYQT5_AVAILABLE
+except ImportError:
+    HAS_DIALOG = False
+
+
+def get_commit_message() -> str:
+    """Extract commit message from Git"""
+    try:
+        git_dir = os.path.join(os.getcwd(), '.git')
+        commit_msg_file = os.path.join(git_dir, 'COMMIT_EDITMSG')
+        
+        if os.path.exists(commit_msg_file):
+            with open(commit_msg_file, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith('#'):
+                        return line
+        return "Commit"
+    except:
+        return "Commit"
+
+
+def get_current_branch() -> str:
+    """Get current Git branch"""
+    try:
+        result = subprocess.run(['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
+                              capture_output=True, text=True, timeout=5)
+        return result.stdout.strip() if result.returncode == 0 else 'main'
+    except:
+        return 'main'
+
+
+def send_to_webhook(data: dict) -> Tuple[bool, Optional[str]]:
+    """Send commit data to Apps Script webhook"""
+    if not config.WEBHOOK_URL:
+        return False, "Webhook URL not configured"
+    
+    try:
+        json_data = json.dumps(data).encode('utf-8')
+        req = urllib.request.Request(
+            config.WEBHOOK_URL,
+            data=json_data,
+            headers={'Content-Type': 'application/json'},
+            method='POST'
+        )
+        
+        with urllib.request.urlopen(req, timeout=config.REQUEST_TIMEOUT) as response:
+            response_data = json.loads(response.read().decode('utf-8'))
+            if response_data.get('success'):
+                return True, None
+            else:
+                return False, response_data.get('error', 'Unknown error')
+    except Exception as e:
+        return False, str(e)
+
+
+def main():
+    """Main hook execution"""
+    print("[DSR Logger] Initializing...")
+    
+    commit_msg = get_commit_message()
+    branch = get_current_branch()
+    
+    if not HAS_DIALOG:
+        print("[DSR Logger] ⚠️  PyQt5 not available - skipping logging")
+        sys.exit(0)
+    
+    print("[DSR Logger] Opening task dialog...")
+    
+    try:
+        # Show PyQt5 dialog
+        task, description, hours, branch_returned, status = show_pyqt5_task_dialog(
+            webhook_url=config.WEBHOOK_URL,
+            commit_msg=commit_msg,
+            branch=branch,
+            default_time=config.DEFAULT_TIME
+        )
+        
+        # Check if cancelled or skipped
+        if task is None or task == "":
+            print("[DSR Logger] ⏭️  Skipped logging - proceeding with commit")
+            sys.exit(0)
+        
+        if hours == -1.0:
+            print("[DSR Logger] ❌ Cancelled by user")
+            sys.exit(1)
+        
+        print(f"[DSR Logger] Logging task: {task[:50]}...")
+        
+        # Prepare webhook data
+        webhook_data = {
+            "taskName": task,
+            "commitMessage": description,
+            "time": hours,
+            "status": status,
+            "branch": branch_returned
+        }
+        
+        # Send to webhook
+        success, error_msg = send_to_webhook(webhook_data)
+        
+        if success:
+            print("[DSR Logger] ✓ Logged successfully")
+        else:
+            print(f"[DSR Logger] ⚠ Warning: {error_msg}")
+        
+        sys.exit(0)
+        
+    except Exception as e:
+        print(f"[DSR Logger] Error: {e}")
+        print("[DSR Logger] Proceeding with commit without logging")
+        sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()

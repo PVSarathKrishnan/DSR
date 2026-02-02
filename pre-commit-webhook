@@ -116,7 +116,7 @@ def validate_time(time_str: str) -> float:
 def show_gui_dialog(commit_msg: str) -> tuple[Optional[str], Optional[str], Optional[float]]:
     """
     Show GUI dialog for commit details
-    Uses platform-appropriate dialogs
+    Uses single comprehensive tkinter dialog (works on all platforms including macOS)
     
     Args:
         commit_msg: The commit message to use as default title
@@ -124,14 +124,8 @@ def show_gui_dialog(commit_msg: str) -> tuple[Optional[str], Optional[str], Opti
     Returns:
         Tuple of (title, description, hours) or (None, None, None) if cancelled
     """
-    import platform
-    
-    # macOS: Use AppleScript (tkinter doesn't render from Git hooks)
-    # Windows/Linux: Use tkinter
-    if platform.system() == "Darwin":
-        return show_macos_dialog_simple(commit_msg)
-    else:
-        return show_tkinter_dialog(commit_msg)
+    # Use tkinter for all platforms (single clean dialog)
+    return show_tkinter_dialog(commit_msg)
 
 
 def show_tkinter_dialog(commit_msg: str) -> tuple[Optional[str], Optional[str], Optional[float]]:
