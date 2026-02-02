@@ -646,7 +646,7 @@ def show_pyqt5_task_dialog(webhook_url: str, commit_msg: str, branch: str, defau
     if dialog.result['cancelled'] or result_code != QDialog.Accepted:
         return None, None, -1.0, None, None
     elif dialog.result['taskName'] == '':
-        return None, None, None, None, None  # Skipped
+        return "", "", 0.0, "", ""  # Skipped - return empty strings not None
     else:
         return (
             dialog.result['taskName'],
