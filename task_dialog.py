@@ -49,36 +49,46 @@ class TaskDialog(QDialog):
     
     def init_ui(self):
         """Initialize clean, minimal, professional UI"""
+        # Resolve paths relative to this script file
+        import os
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        icons_dir = os.path.join(script_dir, 'icons')
+        
         self.setWindowTitle('DSR Commit Logger')
         self.setMinimumWidth(700)
         self.setMinimumHeight(580)
         
         # Clean, minimal, professional styling
-        self.setStyleSheet("""
-            QDialog {
+        # Replaces direct references to url(icons/...) with properly formatted paths
+        # We need to inject the icons_dir into the stylesheet
+        # For CSS, we usually need forward slashes
+        css_icons_dir = icons_dir.replace('\\', '/')
+        
+        self.setStyleSheet(f"""
+            QDialog {{
                 background-color: #ffffff;
-            }
+            }}
             
-            QLabel {
+            QLabel {{
                 color: #1f2937;
                 font-size: 13px;
                 font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            }
-            QLabel[heading="true"] {
+            }}
+            QLabel[heading="true"] {{
                 font-size: 13px;
                 font-weight: 600;
                 color: #111827;
                 margin-bottom: 8px;
-            }
-            QLabel[title="true"] {
+            }}
+            QLabel[title="true"] {{
                 font-size: 20px;
                 font-weight: 700;
                 color: #111827;
                 margin-bottom: 24px;
-            }
+            }}
             
             /* CLEAN COMBOBOX - BOTH TASK AND TIME */
-            QComboBox {
+            QComboBox {{
                 padding: 11px 14px;
                 padding-right: 36px;
                 border: 1.5px solid #d1d5db;
@@ -88,24 +98,24 @@ class TaskDialog(QDialog):
                 font-size: 14px;
                 font-weight: 500;
                 min-height: 20px;
-            }
-            QComboBox:hover {
+            }}
+            QComboBox:hover {{
                 border: 1.5px solid #9ca3af;
                 background-color: #f9fafb;
-            }
-            QComboBox:focus {
+            }}
+            QComboBox:focus {{
                 border: 1.5px solid #3b82f6;
                 background-color: #ffffff;
                 outline: none;
-            }
-            QComboBox:disabled {
+            }}
+            QComboBox:disabled {{
                 background-color: #f3f4f6;
                 color: #9ca3af;
                 border: 1.5px solid #e5e7eb;
-            }
+            }}
             
             /* DROPDOWN BUTTON - WITH ICON */
-            QComboBox::drop-down {
+            QComboBox::drop-down {{
                 subcontrol-origin: padding;
                 subcontrol-position: center right;
                 width: 32px;
@@ -114,27 +124,27 @@ class TaskDialog(QDialog):
                 border-top-right-radius: 7px;
                 border-bottom-right-radius: 7px;
                 background-color: #f9fafb;
-                image: url(icons/arrow_down.svg);
-                padding: 10px; /* Adjust size of icon via padding */
-            }
-            QComboBox:hover::drop-down {
+                image: url({css_icons_dir}/arrow_down.svg);
+                padding: 10px;
+            }}
+            QComboBox:hover::drop-down {{
                 background-color: #f3f4f6;
-            }
-            QComboBox:focus::drop-down {
+            }}
+            QComboBox:focus::drop-down {{
                 background-color: #eff6ff;
                 border-left: 1.5px solid #3b82f6;
-            }
+            }}
             
             /* HIDE STANDARD DOWN ARROW to prevent duplicates */
-            QComboBox::down-arrow {
+            QComboBox::down-arrow {{
                 image: none;
                 border: none;
                 width: 0;
                 height: 0;
-            }
+            }}
             
             /* FIX: DROPDOWN MENU - WHITE BACKGROUND */
-            QComboBox QAbstractItemView {
+            QComboBox QAbstractItemView {{
                 background-color: #ffffff;
                 color: #111827;
                 selection-background-color: #3b82f6;
@@ -144,25 +154,25 @@ class TaskDialog(QDialog):
                 padding: 5px;
                 font-size: 14px;
                 outline: none;
-            }
-            QComboBox QAbstractItemView::item {
+            }}
+            QComboBox QAbstractItemView::item {{
                 padding: 9px 12px;
                 border-radius: 5px;
                 color: #111827;
                 background-color: transparent;
                 min-height: 20px;
-            }
-            QComboBox QAbstractItemView::item:hover {
+            }}
+            QComboBox QAbstractItemView::item:hover {{
                 background-color: #f3f4f6;
                 color: #111827;
-            }
-            QComboBox QAbstractItemView::item:selected {
+            }}
+            QComboBox QAbstractItemView::item:selected {{
                 background-color: #3b82f6;
                 color: #ffffff;
-            }
+            }}
             
             /* TEXT INPUTS */
-            QLineEdit, QTextEdit {
+            QLineEdit, QTextEdit {{
                 padding: 11px 14px;
                 border: 1.5px solid #d1d5db;
                 border-radius: 7px;
@@ -170,131 +180,131 @@ class TaskDialog(QDialog):
                 color: #111827;
                 font-size: 14px;
                 font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            }
-            QLineEdit:hover, QTextEdit:hover {
+            }}
+            QLineEdit:hover, QTextEdit:hover {{
                 border: 1.5px solid #9ca3af;
-            }
-            QLineEdit:focus, QTextEdit:focus {
+            }}
+            QLineEdit:focus, QTextEdit:focus {{
                 border: 1.5px solid #3b82f6;
                 outline: none;
-            }
-            QTextEdit {
+            }}
+            QTextEdit {{
                 font-family: "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", monospace;
-            }
+            }}
             
             /* CLEAN BUTTON STYLING */
-            QPushButton {
+            QPushButton {{
                 padding: 10px 18px;
                 border-radius: 7px;
                 font-size: 13px;
                 font-weight: 600;
                 min-height: 18px;
                 font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            }
+            }}
             
             /* MINIMAL CRUD BUTTONS - SUBTLE GRAY */
-            QPushButton#new_btn, QPushButton#edit_btn, QPushButton#del_btn {
+            QPushButton#new_btn, QPushButton#edit_btn, QPushButton#del_btn {{
                 background-color: #f3f4f6;
                 border: 1.5px solid #d1d5db;
                 color: #374151;
-            }
-            QPushButton#new_btn:hover, QPushButton#edit_btn:hover, QPushButton#del_btn:hover {
+            }}
+            QPushButton#new_btn:hover, QPushButton#edit_btn:hover, QPushButton#del_btn:hover {{
                 background-color: #e5e7eb;
                 border: 1.5px solid #9ca3af;
                 color: #1f2937;
-            }
-            QPushButton#new_btn:pressed, QPushButton#edit_btn:pressed, QPushButton#del_btn:pressed {
+            }}
+            QPushButton#new_btn:pressed, QPushButton#edit_btn:pressed, QPushButton#del_btn:pressed {{
                 background-color: #d1d5db;
-            }
-            QPushButton#edit_btn:disabled, QPushButton#del_btn:disabled {
+            }}
+            QPushButton#edit_btn:disabled, QPushButton#del_btn:disabled {{
                 background-color: #f9fafb;
                 color: #d1d5db;
                 border: 1.5px solid #e5e7eb;
-            }
+            }}
             
             /* ACTION BUTTONS */
-            QPushButton#skip_btn, QPushButton#cancel_btn {
+            QPushButton#skip_btn, QPushButton#cancel_btn {{
                 background-color: #ffffff;
                 border: 1.5px solid #d1d5db;
                 color: #374151;
-            }
-            QPushButton#skip_btn:hover, QPushButton#cancel_btn:hover {
+            }}
+            QPushButton#skip_btn:hover, QPushButton#cancel_btn:hover {{
                 background-color: #f9fafb;
                 border: 1.5px solid #9ca3af;
                 color: #1f2937;
-            }
-            QPushButton#skip_btn:pressed, QPushButton#cancel_btn:pressed {
+            }}
+            QPushButton#skip_btn:pressed, QPushButton#cancel_btn:pressed {{
                 background-color: #f3f4f6;
-            }
+            }}
             
             /* SUBMIT BUTTON - ONLY BLUE ACCENT */
-            QPushButton#submit_btn {
+            QPushButton#submit_btn {{
                 background-color: #3b82f6;
                 border: none;
                 color: #ffffff;
                 font-weight: 700;
-            }
-            QPushButton#submit_btn:hover {
+            }}
+            QPushButton#submit_btn:hover {{
                 background-color: #2563eb;
-            }
-            QPushButton#submit_btn:pressed {
+            }}
+            QPushButton#submit_btn:pressed {{
                 background-color: #1d4ed8;
-            }
+            }}
             
             /* MESSAGE BOX BUTTONS - Fix for invisible buttons */
-            QMessageBox QPushButton {
+            QMessageBox QPushButton {{
                 background-color: #ffffff;
                 border: 1.5px solid #d1d5db;
                 color: #374151;
                 min-width: 80px;
                 padding: 6px 16px;
-            }
-            QMessageBox QPushButton:hover {
+            }}
+            QMessageBox QPushButton:hover {{
                 background-color: #f9fafb;
                 border: 1.5px solid #9ca3af;
                 color: #1f2937;
-            }
-            QMessageBox QPushButton:pressed {
+            }}
+            QMessageBox QPushButton:pressed {{
                 background-color: #f3f4f6;
-            }
+            }}
             
             /* BASE RADIO BUTTON STYLE */
-            QRadioButton {
+            QRadioButton {{
                 font-size: 13px;
                 font-weight: 500;
                 spacing: 9px;
                 color: #374151;
                 padding: 5px;
                 font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            }
-            QRadioButton::indicator {
+            }}
+            QRadioButton::indicator {{
                 width: 18px;
                 height: 18px;
                 border-radius: 9px;
                 border: 2px solid #d1d5db;
                 background-color: #ffffff;
-            }
-            QRadioButton::indicator:hover {
+            }}
+            QRadioButton::indicator:hover {{
                 border: 2px solid #9ca3af;
-            }
+            }}
             
             /* GREEN for In Progress */
-            QRadioButton#in_progress::indicator:checked {
+            QRadioButton#in_progress::indicator:checked {{
                 background-color: #10b981;
                 border: 2px solid #10b981;
-            }
+            }}
             
             /* ORANGE for Completed */
-            QRadioButton#completed::indicator:checked {
+            QRadioButton#completed::indicator:checked {{
                 background-color: #f59e0b;
                 border: 2px solid #f59e0b;
-            }
+            }}
             
             /* RED for Roadblock */
-            QRadioButton#roadblock::indicator:checked {
+            QRadioButton#roadblock::indicator:checked {{
                 background-color: #ef4444;
                 border: 2px solid #ef4444;
-            }
+            }}
         """)
         
         # Main layout
@@ -649,13 +659,76 @@ def show_pyqt5_task_dialog(webhook_url: str, commit_msg: str, branch: str, defau
 
 # For testing
 if __name__ == '__main__':
-    webhook_url = "https://script.google.com/macros/s/YOUR_ID/exec"
-    commit_msg = "Fixed authentication bug"
-    branch = "feature/auth"
+    import sys
+    import os
+    import json
+    import subprocess
     
-    task, commit, time, branch, status = show_pyqt5_task_dialog(webhook_url, commit_msg, branch, 1.0)
-    print(f"Task: {task}")
-    print(f"Commit: {commit}")
-    print(f"Time: {time}")
-    print(f"Branch: {branch}")
-    print(f"Status: {status}")
+    # Try to load configuration
+    try:
+        sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+        from webhook_config import WEBHOOK_URL, DEFAULT_TIME
+        webhook_url = WEBHOOK_URL
+        default_time = DEFAULT_TIME
+    except ImportError:
+        webhook_url = "https://script.google.com/macros/s/YOUR_ID/exec"
+        default_time = 1.0
+
+    # Check if running from Git hook (arguments provided)
+    if len(sys.argv) > 1:
+        commit_msg_file = sys.argv[1]
+        
+        # Read existing commit message
+        try:
+            with open(commit_msg_file, 'r') as f:
+                commit_msg = f.read().strip()
+        except:
+            commit_msg = ""
+            
+        # Get current branch
+        try:
+            branch = subprocess.check_output(
+                ['git', 'symbolic-ref', '--short', 'HEAD'], 
+                stderr=subprocess.DEVNULL
+            ).decode('utf-8').strip()
+        except:
+            branch = "unknown"
+            
+        # Show Dialog
+        task, commit, time, branch, status = show_pyqt5_task_dialog(webhook_url, commit_msg, branch, default_time)
+        
+        # LOGIC FIX: Distinguish between CANCEL (None) and SKIP (Empty String)
+        
+        if task is None:
+            # User clicked Cancel or closed window -> ABORT COMMIT
+            print("Dialog cancelled - Aborting commit.")
+            sys.exit(1)
+            
+        elif task == "":
+            # User clicked Skip Logging -> PROCEED but don't modify message
+            print("⏭️  Skipped logging - proceeding with commit")
+            sys.exit(0)
+            
+        else:
+            # User submitted task -> PROCEED and UPDATE message
+            # Format: title + description
+            full_message = f"{commit}\n\nTask: {task}\nTime: {time}h\nStatus: {status}"
+            with open(commit_msg_file, 'w') as f:
+                f.write(full_message)
+            sys.exit(0)
+
+    else:
+        # TEST MODE (No arguments)
+        print("Running in TEST MODE...")
+        commit_msg = "Fixed authentication bug"
+        branch = "feature/auth"
+        
+        task, commit, time, branch, status = show_pyqt5_task_dialog(webhook_url, commit_msg, branch, 1.0)
+        if task:
+            print(f"Task: {task}")
+            print(f"Commit: {commit}")
+            print(f"Time: {time}")
+            print(f"Branch: {branch}")
+            print(f"Status: {status}")
+        else:
+            print("Cancelled")
