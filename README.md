@@ -300,13 +300,17 @@ Created for efficient commit tracking and daily status reporting.
 ---
 
 
-to test
-
+# 1. Go to your property project
 cd /Users/uiuxateam/my-property-flutter-app
 
-cp /Users/uiuxateam/DSR/pre-commit-webhook .git/hooks/pre-commit
+# 2. Add your local DSR folder as a git remote (named 'dsr-local')
+# This only needs to be done once.
+git remote add dsr-local /Users/uiuxateam/DSR
 
-chmod +x .git/hooks/pre-commit
+# 3. Fetch the latest changes from DSR
+git fetch dsr-local
 
-git commit -m "Test dialog with all fields visible" --allow-empty
+# 4. Update the task_dialog.py file directly from the DSR main branch
+# We use 'git show' to read the file from the other repo and write it to the correct location
+git show dsr-local/main:task_dialog.py > .dsr/task_dialog.py
 **Star ⭐ this repo if it helps your workflow!**
