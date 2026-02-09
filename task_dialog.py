@@ -361,6 +361,7 @@ class TaskDialog(QDialog):
         
         self.commit_text = QTextEdit()
         self.commit_text.setPlainText(self.commit_msg)
+        self.commit_text.setAcceptRichText(False)
         self.commit_text.setMinimumHeight(115)
         self.commit_text.setMaximumHeight(115)
         layout.addWidget(self.commit_text)
